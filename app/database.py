@@ -8,7 +8,14 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./kpi.db")
+def _default_database_url() -> str:
+    """На serverless-хостинге (Vercel) файловая система только для чтения, кроме /tmp."""
+    if os.getenv("VERCEL"):
+        return "sqlite:////tmp/kpi.db"
+    return "sqlite:///./kpi.db"
+
+
+DATABASE_URL = os.getenv("DATABASE_URL") or _default_database_url()
 
 # SQLite needs connect_args check_same_thread=False
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
