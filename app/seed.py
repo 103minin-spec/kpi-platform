@@ -129,15 +129,25 @@ def seed_database(db: Session):
     db.add_all([p_sept, p_oct])
     db.commit()
 
-    # 5. Default Individual Targets for September
-    targets = [
-        EmployeeTarget(period_id=p_sept.id, user_id=u_rop.id, base_rate=90000.0, plan_sales=1200000.0, plan_tasks=30.0, target_calls=80.0, quality_score=95.0),
-        EmployeeTarget(period_id=p_sept.id, user_id=u_sales1.id, base_rate=55000.0, plan_sales=450000.0, plan_tasks=20.0, target_calls=150.0, quality_score=90.0),
-        EmployeeTarget(period_id=p_sept.id, user_id=u_sales2.id, base_rate=50000.0, plan_sales=400000.0, plan_tasks=20.0, target_calls=150.0, quality_score=95.0),
-        EmployeeTarget(period_id=p_sept.id, user_id=u_dev1.id, base_rate=140000.0, plan_sales=0.0, plan_tasks=30.0, target_calls=20.0, quality_score=100.0),
-        EmployeeTarget(period_id=p_sept.id, user_id=u_supp1.id, base_rate=48000.0, plan_sales=0.0, plan_tasks=25.0, target_calls=140.0, quality_score=98.0),
+    # 5. Individual targets for both demo periods (same plan per role in each period)
+    target_templates = [
+        (u_rop, 90000.0, 1200000.0, 30.0, 80.0, 95.0),
+        (u_sales1, 55000.0, 450000.0, 20.0, 150.0, 90.0),
+        (u_sales2, 50000.0, 400000.0, 20.0, 150.0, 95.0),
+        (u_dev1, 140000.0, 0.0, 30.0, 20.0, 100.0),
+        (u_supp1, 48000.0, 0.0, 25.0, 140.0, 98.0),
     ]
-    db.add_all(targets)
+    for period in (p_sept, p_oct):
+        for user, base_rate, plan_sales, plan_tasks, target_calls, quality_score in target_templates:
+            db.add(EmployeeTarget(
+                period_id=period.id,
+                user_id=user.id,
+                base_rate=base_rate,
+                plan_sales=plan_sales,
+                plan_tasks=plan_tasks,
+                target_calls=target_calls,
+                quality_score=quality_score
+            ))
     db.commit()
 
     print("[Seed] Database successfully initialized with demo structure.")

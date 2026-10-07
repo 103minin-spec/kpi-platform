@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 
 from app.database import engine, SessionLocal, Base
 from app.seed import seed_database
+from app.services.demo_service import warmup_demo_data
 from app.services.settings_service import SettingsService
 from app.api import auth, formulas, departments, periods, export, settings
 
@@ -27,6 +28,8 @@ async def lifespan(app: FastAPI):
     try:
         seed_database(db)
         SettingsService.init_settings(db)
+        # В демо-режиме сразу считаем последний период, чтобы дашборд был не пустым
+        await warmup_demo_data(db)
     finally:
         db.close()
     yield
