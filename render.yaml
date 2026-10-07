@@ -1,0 +1,16 @@
+# Деплой демонстрационного стенда на Render (бесплатный тариф).
+# Render собирает образ из Dockerfile и поднимает FastAPI на публичном адресе.
+services:
+  - type: web
+    name: kpi-platform
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: BITRIX_MOCK_MODE
+        value: "true"
+      - key: CORS_ORIGINS
+        value: "*"

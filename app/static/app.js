@@ -9,6 +9,8 @@ const app = createApp({
     const currentUser = ref({ id: 1, full_name: 'Загрузка...', role: 'ADMIN' });
     const authToken = ref(localStorage.getItem('kpi_token') || '');
     const bitrixStatus = ref({ mock_mode: true, is_configured: false });
+    const apiOnline = ref(true);
+    const apiError = ref('');
 
     // Periods & Results
     const periods = ref([]);
@@ -79,7 +81,22 @@ const app = createApp({
           options.headers['Authorization'] = `Bearer ${authToken.value}`;
         }
       }
-      const resp = await fetch(url, options);
+      let resp;
+      try {
+        resp = await fetch(url, options);
+      } catch (e) {
+        // Бэкенд не запущен или недоступен: показываем это явно, а не «мертвый» интерфейс
+        apiOnline.value = false;
+        apiError.value = e && e.message ? e.message : String(e);
+        return {
+          ok: false,
+          status: 0,
+          statusText: 'Нет связи с сервером',
+          json: async () => ({ detail: 'Нет связи с сервером API. Запустите python run.py и откройте http://127.0.0.1:8000' })
+        };
+      }
+      apiOnline.value = true;
+      apiError.value = '';
       if (resp.status === 401) {
         authToken.value = '';
         localStorage.removeItem('kpi_token');
@@ -137,21 +154,32 @@ const app = createApp({
       try {
         // 1. Users list
         const usersResp = await fetch('/api/auth/users');
-        allUsers.value = await usersResp.json();
+        allUsers.value = usersResp.ok ? await usersResp.json() : [];
         if (allUsers.value.length > 0) {
+          apiOnline.value = true;
+          apiError.value = '';
           const savedUid = localStorage.getItem('kpi_user_id');
           const matchedUser = allUsers.value.find(u => u.id === Number(savedUid));
           selectedUserId.value = matchedUser ? matchedUser.id : allUsers.value[0].id;
           await switchUser(false);
+        } else {
+          // Бэкенд недоступен: дальше грузить нечего, показываем предупреждение
+          apiOnline.value = false;
+          apiError.value = 'Сервер API не отвечает на ' + window.location.origin;
+          return;
         }
 
         // 2. Bitrix Status
         const b24Resp = await fetch('/api/auth/bitrix/status');
-        bitrixStatus.value = await b24Resp.json();
+        if (b24Resp.ok) {
+          bitrixStatus.value = await b24Resp.json();
+        }
 
         // 3. Formula Variables Catalog
         const varsResp = await fetch('/api/formulas/variables');
-        variablesCatalog.value = await varsResp.json();
+        if (varsResp.ok) {
+          variablesCatalog.value = await varsResp.json();
+        }
 
         // 4. Formula Templates & Positions
         const tplResp = await authFetch('/api/formulas/templates');
@@ -168,9 +196,17 @@ const app = createApp({
 
       } catch (e) {
         console.error('Initialization error:', e);
+        apiOnline.value = false;
+        apiError.value = e && e.message ? e.message : String(e);
       } finally {
         refreshIcons();
       }
+    };
+
+    const retryConnection = async () => {
+      apiOnline.value = true;
+      apiError.value = '';
+      await init();
     };
 
     const loadPeriods = async () => {
@@ -234,6 +270,8 @@ const app = createApp({
         }
       } catch (e) {
         console.error('Login error:', e);
+        apiOnline.value = false;
+        apiError.value = e && e.message ? e.message : String(e);
       }
       refreshIcons();
     };
@@ -589,6 +627,8 @@ const app = createApp({
       selectedUserId,
       currentUser,
       bitrixStatus,
+      apiOnline,
+      apiError,
       periods,
       selectedPeriodId,
       currentPeriod,
@@ -635,7 +675,8 @@ const app = createApp({
       loadBitrixSettings,
       saveBitrixSettings,
       testBitrixConnection,
-      loadPeriodData
+      loadPeriodData,
+      retryConnection
     };
   }
 });

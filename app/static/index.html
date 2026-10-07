@@ -45,6 +45,24 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen">
   <div id="app" v-cloak class="min-h-screen flex flex-col">
 
+    <!-- Предупреждение: интерфейс открыт без запущенного бэкенда -->
+    <div v-if="!apiOnline" class="bg-red-600 text-white text-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
+        <span class="flex-1 min-w-[16rem]">
+          <strong>Нет связи с сервером приложения.</strong>
+          Это клиент-серверная платформа: без запущенного бэкенда данные и кнопки не работают.
+          Выполните <code class="font-mono bg-red-700 px-1.5 py-0.5 rounded">python run.py</code>
+          в папке проекта и откройте
+          <a href="http://127.0.0.1:8000" class="underline font-semibold">http://127.0.0.1:8000</a>.
+        </span>
+        <button @click="retryConnection" class="bg-white text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-50 transition">
+          Проверить снова
+        </button>
+      </div>
+      <div v-if="apiError" class="max-w-7xl mx-auto px-4 pb-2 text-[11px] text-red-100 font-mono truncate">{{ apiError }}</div>
+    </div>
+
     <!-- TOP HEADER -->
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
