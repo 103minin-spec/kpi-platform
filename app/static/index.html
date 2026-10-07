@@ -63,6 +63,15 @@
       <div v-if="apiError" class="max-w-7xl mx-auto px-4 pb-2 text-[11px] text-red-100 font-mono truncate">{{ apiError }}</div>
     </div>
 
+    <!-- Всплывающие сообщения вместо alert(): во встроенных браузерах alert() блокируется -->
+    <div v-if="notice"
+         class="fixed top-4 right-4 z-[70] max-w-sm rounded-xl shadow-2xl px-4 py-3 text-sm flex items-start gap-2 border"
+         :class="notice.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'">
+      <span class="font-bold">{{ notice.type === 'error' ? '⚠' : '✓' }}</span>
+      <span class="flex-1 whitespace-pre-line">{{ notice.text }}</span>
+      <button @click="notice = null" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+    </div>
+
     <!-- TOP HEADER -->
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -487,7 +496,7 @@
             <p class="text-xs text-slate-500 mt-0.5">Создание периодов, запуск расчета, фиксация и скачивание ведомостей</p>
           </div>
           
-          <button v-if="currentUser.role === 'ADMIN'" @click="showNewPeriodModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center shadow transition">
+          <button v-if="currentUser.role === 'ADMIN'" @click="openNewPeriodModal" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center shadow transition">
             <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i>Новый период
           </button>
         </div>
@@ -757,7 +766,8 @@
         <div class="space-y-3 text-sm">
           <div>
             <label class="block text-xs font-semibold text-slate-600 mb-1">Название периода:</label>
-            <input type="text" v-model="newPeriodForm.name" placeholder="Ноябрь 2026" class="w-full border rounded px-3 py-1.5 text-sm">
+            <input type="text" v-model="newPeriodForm.name" placeholder="Например: Ноябрь 2026" class="w-full border rounded px-3 py-1.5 text-sm">
+            <p class="text-[11px] text-slate-400 mt-1">Подставляется автоматически по дате начала — при желании измените.</p>
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
@@ -771,9 +781,16 @@
           </div>
         </div>
 
+        <div v-if="periodFormError" class="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
+          {{ periodFormError }}
+        </div>
+
         <div class="flex justify-end space-x-2 pt-2">
           <button @click="showNewPeriodModal = false" class="px-4 py-2 border rounded-lg text-xs font-semibold">Отмена</button>
-          <button @click="submitNewPeriod" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">Создать</button>
+          <button @click="submitNewPeriod" :disabled="creating"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold disabled:opacity-60 transition">
+            {{ creating ? 'Создание...' : 'Создать' }}
+          </button>
         </div>
       </div>
     </div>

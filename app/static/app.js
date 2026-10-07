@@ -19,6 +19,10 @@ const app = createApp({
     const calculating = ref(false);
     const selectedResultModal = ref(null);
     const showNewPeriodModal = ref(false);
+    const periodFormError = ref('');
+    const creating = ref(false);
+    const notice = ref(null);
+    let noticeTimer = null;
     const newPeriodForm = reactive({
       name: '',
       start_date: '2026-11-01',
@@ -111,6 +115,32 @@ const app = createApp({
           window.lucide.createIcons();
         }
       });
+    };
+
+    // Всплывающие сообщения показываем собственной плашкой: системный notify() во встроенных
+    // и мобильных браузерах часто блокируется, и тогда кажется, что кнопка не работает.
+    const notify = (text, type = null) => {
+      const message = String(text);
+      const kind = type || (/^(Ошибка|Не удалось|Нет связи|Укажите|Введите)/i.test(message) ? 'error' : 'success');
+      notice.value = { text: message, type: kind };
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => { notice.value = null; }, 8000);
+    };
+
+    // Название периода подставляется по дате начала: «Ноябрь 2026»
+    const suggestPeriodName = () => {
+      const date = new Date(newPeriodForm.start_date);
+      if (isNaN(date.getTime())) return '';
+      const month = new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(date);
+      return month.charAt(0).toUpperCase() + month.slice(1) + ' ' + date.getFullYear();
+    };
+
+    const openNewPeriodModal = () => {
+      periodFormError.value = '';
+      if (!newPeriodForm.name.trim()) {
+        newPeriodForm.name = suggestPeriodName();
+      }
+      showNewPeriodModal.value = true;
     };
 
     const tabClass = (tab) => {
@@ -282,13 +312,13 @@ const app = createApp({
         const resp = await authFetch(`/api/auth/bitrix/toggle-mock?enabled=${nextMode}`, { method: 'POST' });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка переключения: ' + (err.detail || resp.statusText));
+          notify('Ошибка переключения: ' + (err.detail || resp.statusText));
           return;
         }
         const data = await resp.json();
         bitrixStatus.value.mock_mode = data.mock_mode;
       } catch (e) {
-        alert('Ошибка запроса: ' + e);
+        notify('Ошибка запроса: ' + e);
       }
       refreshIcons();
     };
@@ -299,17 +329,17 @@ const app = createApp({
         const resp = await authFetch(`/api/periods/${periodId}/calculate`, { method: 'POST' });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка расчета: ' + (err.detail || resp.statusText));
+          notify('Ошибка расчета: ' + (err.detail || resp.statusText));
           return;
         }
         const data = await resp.json();
         if (data.warnings && data.warnings.length > 0) {
           console.warn('Предупреждения при расчете:', data.warnings);
-          alert('Расчет выполнен с предупреждениями:\n• ' + data.warnings.join('\n• '));
+          notify('Расчет выполнен с предупреждениями:\n• ' + data.warnings.join('\n• '));
         }
         await loadPeriods();
       } catch (e) {
-        alert('Ошибка при выполнении запроса: ' + e);
+        notify('Ошибка при выполнении запроса: ' + e);
       } finally {
         calculating.value = false;
         refreshIcons();
@@ -317,17 +347,24 @@ const app = createApp({
     };
 
     const lockPeriod = async (periodId) => {
-      if (!confirm('Зафиксировать период? Расчеты будут окончательно заморожены для архива и бухгалтерского отчета.')) return;
+      // confirm() может быть недоступен во встроенных браузерах — тогда просто продолжаем
+      let confirmed = true;
+      try {
+        confirmed = confirm('Зафиксировать период? Расчеты будут окончательно заморожены для архива и бухгалтерского отчета.');
+      } catch (e) {
+        confirmed = true;
+      }
+      if (!confirmed) return;
       try {
         const resp = await authFetch(`/api/periods/${periodId}/lock`, { method: 'POST' });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка фиксации: ' + (err.detail || resp.statusText));
+          notify('Ошибка фиксации: ' + (err.detail || resp.statusText));
           return;
         }
         await loadPeriods();
       } catch (e) {
-        alert('Ошибка: ' + e);
+        notify('Ошибка: ' + e);
       }
     };
 
@@ -336,7 +373,7 @@ const app = createApp({
         const resp = await authFetch(`/api/export/periods/${periodId}/excel`);
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка экспорта: ' + (err.detail || 'Доступ запрещен'));
+          notify('Ошибка экспорта: ' + (err.detail || 'Доступ запрещен'));
           return;
         }
         const blob = await resp.blob();
@@ -349,7 +386,7 @@ const app = createApp({
         a.remove();
         window.URL.revokeObjectURL(url);
       } catch (e) {
-        alert('Ошибка скачивания: ' + e);
+        notify('Ошибка скачивания: ' + e);
       }
     };
 
@@ -358,7 +395,7 @@ const app = createApp({
         const resp = await authFetch(`/api/export/periods/${periodId}/csv`);
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка экспорта: ' + (err.detail || 'Доступ запрещен'));
+          notify('Ошибка экспорта: ' + (err.detail || 'Доступ запрещен'));
           return;
         }
         const blob = await resp.blob();
@@ -371,7 +408,7 @@ const app = createApp({
         a.remove();
         window.URL.revokeObjectURL(url);
       } catch (e) {
-        alert('Ошибка скачивания: ' + e);
+        notify('Ошибка скачивания: ' + e);
       }
     };
 
@@ -483,7 +520,7 @@ const app = createApp({
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка сохранения: ' + (err.detail || resp.statusText));
+          notify('Ошибка сохранения: ' + (err.detail || resp.statusText));
           return;
         }
 
@@ -497,7 +534,7 @@ const app = createApp({
           item.description = currentFormulaDesc.value;
         }
       } catch (e) {
-        alert('Ошибка при сохранении: ' + e);
+        notify('Ошибка при сохранении: ' + e);
       } finally {
         savingFormula.value = false;
         refreshIcons();
@@ -518,21 +555,37 @@ const app = createApp({
           })
         });
         if (resp.ok) {
-          alert('План для сотрудника успешно обновлен!');
+          notify('План для сотрудника успешно обновлен!');
         } else {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка сохранения плана: ' + (err.detail || resp.statusText));
+          notify('Ошибка сохранения плана: ' + (err.detail || resp.statusText));
         }
       } catch (e) {
-        alert('Ошибка сохранения плана: ' + e);
+        notify('Ошибка сохранения плана: ' + e);
       }
     };
 
     const submitNewPeriod = async () => {
-      if (!newPeriodForm.name) {
-        alert('Укажите название периода');
+      periodFormError.value = '';
+
+      // Название не обязательно вводить вручную — подставляем по дате начала
+      if (!newPeriodForm.name.trim()) {
+        newPeriodForm.name = suggestPeriodName();
+      }
+      if (!newPeriodForm.name.trim()) {
+        periodFormError.value = 'Укажите название периода.';
         return;
       }
+      if (!newPeriodForm.start_date || !newPeriodForm.end_date) {
+        periodFormError.value = 'Укажите даты начала и окончания периода.';
+        return;
+      }
+      if (newPeriodForm.start_date > newPeriodForm.end_date) {
+        periodFormError.value = 'Дата начала не может быть позже даты окончания.';
+        return;
+      }
+
+      creating.value = true;
       try {
         const resp = await authFetch('/api/periods', {
           method: 'POST',
@@ -541,15 +594,22 @@ const app = createApp({
         });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          alert('Ошибка создания: ' + (err.detail || resp.statusText));
+          const detail = Array.isArray(err.detail)
+            ? err.detail.map(item => item.msg).join('; ')
+            : (err.detail || resp.statusText);
+          periodFormError.value = 'Не удалось создать период: ' + detail;
           return;
         }
         const created = await resp.json();
         showNewPeriodModal.value = false;
+        notify('Период «' + created.name + '» создан');
         selectedPeriodId.value = created.id;
         await loadPeriods();
       } catch (e) {
-        alert('Ошибка создания: ' + e);
+        periodFormError.value = 'Ошибка запроса: ' + e;
+      } finally {
+        creating.value = false;
+        refreshIcons();
       }
     };
 
@@ -572,7 +632,7 @@ const app = createApp({
     const saveBitrixSettings = async () => {
       const urlToSave = bitrixWebhookInput.value.trim();
       if (!urlToSave) {
-        alert('Введите новый URL вебхука для сохранения или оставьте поле пустым.');
+        notify('Введите новый URL вебхука для сохранения или оставьте поле пустым.');
         return;
       }
       try {
@@ -638,6 +698,9 @@ const app = createApp({
       selectedResultModal,
       showNewPeriodModal,
       newPeriodForm,
+      periodFormError,
+      creating,
+      notice,
       variablesCatalog,
       allPositions,
       selectedPositionId,
@@ -676,7 +739,8 @@ const app = createApp({
       saveBitrixSettings,
       testBitrixConnection,
       loadPeriodData,
-      retryConnection
+      retryConnection,
+      openNewPeriodModal
     };
   }
 });
