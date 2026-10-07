@@ -63,7 +63,7 @@ def seed_database(db: Session):
         department_id=dept_sales.id,
         position_id=None,
         bitrix_user_id=1,
-        avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     u_rop = User(
         email="voronov@company.ru",
@@ -72,7 +72,7 @@ def seed_database(db: Session):
         department_id=dept_sales.id,
         position_id=pos_rop.id,
         bitrix_user_id=2,
-        avatar_url="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     u_sales1 = User(
         email="sokolov@company.ru",
@@ -81,7 +81,7 @@ def seed_database(db: Session):
         department_id=dept_sales.id,
         position_id=pos_sales.id,
         bitrix_user_id=3,
-        avatar_url="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     u_sales2 = User(
         email="kuznetsova@company.ru",
@@ -90,7 +90,7 @@ def seed_database(db: Session):
         department_id=dept_sales.id,
         position_id=pos_sales.id,
         bitrix_user_id=4,
-        avatar_url="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     u_dev1 = User(
         email="vasiliev@company.ru",
@@ -99,7 +99,7 @@ def seed_database(db: Session):
         department_id=dept_it.id,
         position_id=pos_dev.id,
         bitrix_user_id=5,
-        avatar_url="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     u_supp1 = User(
         email="morozova@company.ru",
@@ -108,7 +108,7 @@ def seed_database(db: Session):
         department_id=dept_support.id,
         position_id=pos_support.id,
         bitrix_user_id=6,
-        avatar_url="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=120"
+        avatar_url="/static/img/avatar.svg"
     )
     db.add_all([u_admin, u_rop, u_sales1, u_sales2, u_dev1, u_supp1])
     db.commit()

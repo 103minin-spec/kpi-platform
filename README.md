@@ -48,6 +48,7 @@
 
 - **Презентационный слой (Frontend)**:
   - SPA на Vue.js 3 + Tailwind CSS без сборщиков (`app/static/index.html`, `app/static/app.js`).
+  - Все библиотеки и шрифты лежат локально в `app/static/vendor` (Vue, Tailwind, Lucide, Inter, JetBrains Mono) — интерфейс полностью работает **без доступа в интернет**.
   - Интерактивный конструктор, реактивная песочница, ролевое скрытие элементов управления и авторизованный клиент `authFetch`.
 - **Слой API (FastAPI Routers)**:
   - `app/api/auth.py`: авторизация, управление сессиями (`/login`, `/me`, `/logout`), переключение mock-режима.
