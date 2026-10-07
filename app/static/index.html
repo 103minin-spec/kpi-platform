@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KPI & Эффективность | Платформа расчета премий</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e293b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    [v-cloak] { display: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="app" v-cloak class="min-h-screen flex flex-col">
+
+    <!-- TOP HEADER -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        
+        <!-- Brand / Logo -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <i data-lucide="calculator" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-lg tracking-tight text-white">KPI Formula Engine</span>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-500/20 text-blue-300 border border-blue-400/30">Bitrix24</span>
+            </div>
+            <p class="text-xs text-slate-400">Платформа расчета эффективности и премий</p>
+          </div>
+        </div>
+
+        <!-- Mode & Role Switchers -->
+        <div class="flex items-center space-x-4">
+          <!-- Mock Mode Toggle -->
+          <div class="flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+            <span class="inline-block w-2.5 h-2.5 rounded-full" :class="bitrixStatus.mock_mode ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+            <span class="text-slate-300 hidden sm:inline">{{ bitrixStatus.mock_mode ? 'Демо-режим (Mock)' : 'Битрикс24 Live' }}</span>
+            <button v-if="currentUser.role === 'ADMIN'" @click="toggleMockMode" class="text-blue-400 hover:text-blue-300 font-medium underline text-xs ml-1">
+              {{ bitrixStatus.mock_mode ? 'Вкл. Live' : 'Вкл. Mock' }}
+            </button>
+          </div>
+
+          <!-- User Role Switcher -->
+          <div class="flex items-center space-x-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+            <img :src="currentUser.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120'" class="w-7 h-7 rounded-full object-cover border border-slate-600">
+            <div class="text-left hidden md:block">
+              <div class="text-xs font-semibold text-white leading-tight">{{ currentUser.full_name }}</div>
+              <div class="text-[10px] text-slate-400 leading-tight">
+                <span v-if="currentUser.role === 'ADMIN'" class="text-amber-400">Администратор HR</span>
+                <span v-else-if="currentUser.role === 'HEAD'" class="text-indigo-400">Руководитель отдела</span>
+                <span v-else class="text-emerald-400">Сотрудник</span>
+              </div>
+            </div>
+            <select v-model="selectedUserId" @change="switchUser" class="bg-slate-700 text-xs text-white rounded px-2 py-1 border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500">
+              <option v-for="u in allUsers" :key="u.id" :value="u.id">
+                {{ u.full_name }} ({{ u.role }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- NAVIGATION BAR -->
+      <div class="bg-slate-800/95 px-4 sm:px-6 lg:px-8 border-t border-slate-700/60">
+        <div class="max-w-7xl mx-auto flex space-x-1 sm:space-x-4 overflow-x-auto py-2">
+          
+          <button @click="currentTab = 'dashboard'" :class="tabClass('dashboard')">
+            <i data-lucide="layout-dashboard" class="w-4 h-4 mr-2"></i>Дашборд
+          </button>
+
+          <button v-if="currentUser.role === 'ADMIN'" @click="currentTab = 'formulas'" :class="tabClass('formulas')">
+            <i data-lucide="variable" class="w-4 h-4 mr-2"></i>Конструктор формул & Песочница
+          </button>
+
+          <button @click="currentTab = 'periods'" :class="tabClass('periods')">
+            <i data-lucide="calendar" class="w-4 h-4 mr-2"></i>Расчетные периоды
+          </button>
+
+          <button v-if="currentUser.role !== 'EMPLOYEE'" @click="currentTab = 'targets'" :class="tabClass('targets')">
+            <i data-lucide="target" class="w-4 h-4 mr-2"></i>Индивидуальные планы
+          </button>
+
+          <button @click="currentTab = 'my_kpi'" :class="tabClass('my_kpi')">
+            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Мой KPI и премия
+          </button>
+
+          <button v-if="currentUser.role === 'ADMIN'" @click="currentTab = 'settings'; loadBitrixSettings()" :class="tabClass('settings')">
+            <i data-lucide="settings" class="w-4 h-4 mr-2"></i>Интеграция Битрикс24
+          </button>
+
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+      <!-- ================= TAB: DASHBOARD ================= -->
+      <section v-if="currentTab === 'dashboard'" class="space-y-6">
+        
+        <!-- Period Bar & Fast Actions -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <span class="text-sm font-medium text-slate-500">Активный период:</span>
+            <select v-model="selectedPeriodId" @change="loadPeriodData" class="bg-slate-50 border border-slate-300 text-slate-900 text-sm font-semibold rounded-lg px-3 py-1.5 focus:ring-blue-500 focus:border-blue-500">
+              <option v-for="p in periods" :key="p.id" :value="p.id">
+                {{ p.name }} ({{ p.status === 'LOCKED' ? '🔒 Зафиксирован' : p.status === 'CALCULATED' ? '✓ Рассчитан' : 'Черновик' }})
+              </option>
+            </select>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <button v-if="currentUser.role === 'ADMIN' && currentPeriod && currentPeriod.status !== 'LOCKED'" 
+                    @click="triggerCalculation(currentPeriod.id)" 
+                    :disabled="calculating"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center shadow-sm disabled:opacity-50 transition">
+              <i data-lucide="refresh-cw" class="w-4 h-4 mr-2" :class="{'animate-spin': calculating}"></i>
+              {{ calculating ? 'Сбор данных и расчет...' : 'Собрать факт Битрикс24 и Рассчитать' }}
+            </button>
+
+            <button v-if="currentUser.role !== 'EMPLOYEE' && currentPeriod && currentPeriod.results_count > 0" 
+                    @click="exportExcel(currentPeriod.id)" 
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center shadow-sm transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2"></i>Скачать Excel (.xlsx)
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Summary Metric Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Фонд премий</span>
+              <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <i data-lucide="banknote" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-2 text-2xl font-bold text-slate-900">{{ formatMoney(dashboardStats.totalBonus) }}</div>
+            <p class="text-xs text-slate-500 mt-1">Начислено по результатам формул</p>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Средний KPI компании</span>
+              <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <i data-lucide="trending-up" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-2 text-2xl font-bold text-slate-900">{{ dashboardStats.avgKpi }}%</div>
+            <p class="text-xs text-emerald-600 mt-1 flex items-center font-medium">
+              <i data-lucide="check" class="w-3.5 h-3.5 mr-1"></i>Норматив выполнен
+            </p>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Выполнили план</span>
+              <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <i data-lucide="award" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-2 text-2xl font-bold text-slate-900">{{ dashboardStats.abovePlanCount }} из {{ dashboardStats.totalEmployees }}</div>
+            <p class="text-xs text-slate-500 mt-1">Сотрудники с KPI ≥ 100%</p>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Статус архива</span>
+              <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-2 text-lg font-bold" :class="currentPeriod && currentPeriod.status === 'LOCKED' ? 'text-emerald-700' : 'text-amber-700'">
+              {{ currentPeriod && currentPeriod.status === 'LOCKED' ? 'Зафиксирован' : 'Открыт для правок' }}
+            </div>
+            <p class="text-xs text-slate-500 mt-1">{{ currentPeriod ? currentPeriod.name : '—' }}</p>
+          </div>
+        </div>
+
+        <!-- Leaderboard & Efficiency Table -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h3 class="font-bold text-slate-900 text-base">
+                {{ currentUser.role === 'EMPLOYEE' ? 'Мои расчетные показатели за период' : 'Сводная ведомость эффективности сотрудников' }}
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                {{ currentUser.role === 'EMPLOYEE' ? 'Персональный расчет премии на основе формулы и факта' : 'Данные подтянуты из Битрикс24 и рассчитаны по формулам должностей' }}
+              </p>
+            </div>
+            <div class="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
+              Всего сотрудников: <strong class="text-slate-800">{{ currentResults.length }}</strong>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+              <thead class="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 text-left">Сотрудник</th>
+                  <th class="px-4 py-3 text-left">Отдел / Должность</th>
+                  <th class="px-4 py-3 text-right">Оклад</th>
+                  <th class="px-4 py-3 text-right">План / Факт выручки</th>
+                  <th class="px-4 py-3 text-center">Задачи (в срок)</th>
+                  <th class="px-4 py-3 text-center">Выполнение KPI</th>
+                  <th class="px-4 py-3 text-right">Премия</th>
+                  <th class="px-4 py-3 text-right">Итого к выплате</th>
+                  <th class="px-4 py-3 text-center">Действие</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 bg-white">
+                <tr v-for="row in currentResults" :key="row.id" class="hover:bg-slate-50/80 transition">
+                  <td class="px-4 py-3 font-medium text-slate-900 whitespace-nowrap flex items-center space-x-2">
+                    <span class="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                      {{ row.employee_name.charAt(0) }}
+                    </span>
+                    <span>{{ row.employee_name }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600 whitespace-nowrap">
+                    <div class="font-medium text-slate-800">{{ row.position_name }}</div>
+                    <div class="text-xs text-slate-400">{{ row.department_name }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                    {{ formatMoney(row.computed_variables.base_rate) }}
+                  </td>
+                  <td class="px-4 py-3 text-right whitespace-nowrap">
+                    <div class="font-medium text-slate-800">{{ formatMoney(row.computed_variables.deals_won_sum) }}</div>
+                    <div class="text-xs text-slate-400">план: {{ formatMoney(row.computed_variables.plan_sales) }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <span class="font-medium text-slate-800">{{ row.computed_variables.tasks_closed || 0 }}</span>
+                    <span class="text-xs text-slate-400 ml-1">({{ row.computed_variables.tasks_on_time_pct || 100 }}%)</span>
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <span :class="kpiBadgeClass(row.kpi_percent)" class="px-2.5 py-1 rounded-full text-xs font-bold">
+                      {{ row.kpi_percent }}%
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-right font-semibold text-emerald-600 whitespace-nowrap">
+                    +{{ formatMoney(row.bonus_amount) }}
+                  </td>
+                  <td class="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                    {{ formatMoney(row.total_payout) }}
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <button @click="openResultDetails(row)" class="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline">
+                      Формула
+                    </button>
+                  </td>
+                </tr>
+
+                <tr v-if="currentResults.length === 0">
+                  <td colspan="9" class="px-4 py-8 text-center text-slate-500">
+                    <i data-lucide="inbox" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                    В данном периоде расчет еще не производился. Нажмите «Собрать факт Битрикс24 и Рассчитать».
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB: FORMULA BUILDER & SANDBOX ================= -->
+      <section v-if="currentTab === 'formulas'" class="space-y-6">
+        
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900">Интерактивный конструктор формул и Песочница</h2>
+              <p class="text-xs text-slate-500 mt-1">Настройка формул расчета в Excel-синтаксисе с проверкой на живых данных</p>
+            </div>
+            
+            <!-- Select Position to Edit -->
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-semibold text-slate-500">Должность:</span>
+              <select v-model="selectedPositionId" @change="loadPositionFormula" class="bg-slate-50 border border-slate-300 text-sm font-semibold rounded-lg px-3 py-1.5 focus:ring-blue-500 focus:border-blue-500">
+                <option v-for="pos in allPositions" :key="pos.id" :value="pos.id">
+                  {{ pos.department_name }} → {{ pos.position_name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+            
+            <!-- Left Column: Formula Editor (7 cols) -->
+            <div class="lg:col-span-7 space-y-4">
+              
+              <!-- Quick Insert Buttons: Variables -->
+              <div>
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                  Переменные из Битрикс24 (клик для вставки):
+                </span>
+                <div class="flex flex-wrap gap-1.5">
+                  <button v-for="v in variablesCatalog" :key="v.name" @click="insertToken(v.name)" 
+                          class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs px-2.5 py-1 rounded-md transition font-mono"
+                          :title="v.title + ' (' + v.unit + ')'">
+                    @{{ v.name }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick Insert Buttons: Functions -->
+              <div>
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                  Функции Excel:
+                </span>
+                <div class="flex flex-wrap gap-1.5 font-mono text-xs">
+                  <button @click="insertToken('IF(condition, true_val, false_val)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">IF(…)</button>
+                  <button @click="insertToken('AND(a, b)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">AND(…)</button>
+                  <button @click="insertToken('OR(a, b)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">OR(…)</button>
+                  <button @click="insertToken('MIN(a, b)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">MIN(…)</button>
+                  <button @click="insertToken('MAX(a, b)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">MAX(…)</button>
+                  <button @click="insertToken('ROUND(val, 2)')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1 rounded border border-slate-300">ROUND(…)</button>
+                </div>
+              </div>
+
+              <!-- Formula Expression Textarea -->
+              <div class="space-y-1.5">
+                <div class="flex justify-between items-center">
+                  <label class="text-xs font-bold text-slate-700 uppercase">Строка формулы расчета премии (₽):</label>
+                  <div v-if="sandboxResult" class="text-xs flex items-center font-medium">
+                    <span v-if="sandboxResult.valid" class="text-emerald-600 flex items-center">
+                      <i data-lucide="check-circle" class="w-3.5 h-3.5 mr-1"></i>Синтаксис корректен
+                    </span>
+                    <span v-else class="text-red-600 flex items-center">
+                      <i data-lucide="alert-circle" class="w-3.5 h-3.5 mr-1"></i>
+                      <span v-if="sandboxResult.unknown_vars && sandboxResult.unknown_vars.length > 0">
+                        Неизвестные переменные: {{ sandboxResult.unknown_vars.join(', ') }}
+                      </span>
+                      <span v-else>{{ sandboxResult.error }}</span>
+                    </span>
+                  </div>
+                </div>
+                <textarea id="formulaTextarea" v-model="currentFormulaExpr" 
+                          @input="runSandboxTest" 
+                          @keyup="trackSelection" 
+                          @mouseup="trackSelection" 
+                          @select="trackSelection"
+                          rows="5" 
+                          class="w-full font-mono text-sm p-3 bg-slate-900 text-emerald-400 rounded-lg border border-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          placeholder="Например: IF(deals_won_sum >= plan_sales, base_rate * 0.7, base_rate * 0.3)"></textarea>
+              </div>
+
+              <!-- Formula Description -->
+              <div>
+                <label class="text-xs font-semibold text-slate-600 block mb-1">Пояснение к правилу расчета для сотрудников:</label>
+                <input v-model="currentFormulaDesc" type="text" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="При выполнении плана премия 70%...">
+              </div>
+
+              <div class="flex items-center space-x-3 pt-2">
+                <button @click="saveFormulaTemplate" :disabled="savingFormula || (sandboxResult && !sandboxResult.valid)"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center shadow disabled:opacity-50 transition">
+                  <i data-lucide="save" class="w-4 h-4 mr-2"></i>{{ savingFormula ? 'Сохранение...' : 'Сохранить формулу' }}
+                </button>
+                <span v-if="formulaSavedAlert" class="text-xs font-medium text-emerald-600 flex items-center">
+                  <i data-lucide="check" class="w-4 h-4 mr-1"></i>Формула успешно сохранена!
+                </span>
+              </div>
+
+            </div>
+
+            <!-- Right Column: Interactive Sandbox (5 cols) -->
+            <div class="lg:col-span-5 bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
+              <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div class="flex items-center space-x-2">
+                  <div class="w-6 h-6 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i>
+                  </div>
+                  <h3 class="font-bold text-slate-900 text-sm">Песочница тестирования (Sandbox)</h3>
+                </div>
+                <span class="text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono">Live Preview</span>
+              </div>
+
+              <!-- Computed Result Card -->
+              <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                <span class="text-xs font-medium text-slate-500 uppercase">Итоговый расчет премии</span>
+                <div class="text-3xl font-extrabold text-blue-600 mt-1">
+                  {{ sandboxResult && sandboxResult.valid ? formatMoney(sandboxResult.result) : '— ₽' }}
+                </div>
+                <div class="text-xs text-slate-500 mt-1 font-mono">
+                  Результат выполнения формулы
+                </div>
+              </div>
+
+              <!-- Test Variables Adjusters -->
+              <div class="space-y-3">
+                <div v-if="sandboxResult && sandboxResult.unknown_vars && sandboxResult.unknown_vars.length > 0" 
+                     class="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs space-y-1">
+                  <span class="font-bold text-amber-800 flex items-center">
+                    <i data-lucide="alert-triangle" class="w-3.5 h-3.5 mr-1 text-amber-600"></i>Неизвестные переменные:
+                  </span>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    <span v-for="uVar in sandboxResult.unknown_vars" :key="uVar" class="bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold">
+                      {{ uVar }}
+                    </span>
+                  </div>
+                  <p class="text-amber-700 mt-1">Эти переменные отсутствуют в каталоге показателей платформы.</p>
+                </div>
+
+                <span class="text-xs font-bold text-slate-600 uppercase tracking-wider block">
+                  Тестовые значения переменных:
+                </span>
+                
+                <div v-for="varName in (sandboxResult ? sandboxResult.used_vars : [])" :key="varName" class="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                  <div class="flex justify-between text-xs">
+                    <span class="font-mono font-bold text-slate-700">@{{ varName }}</span>
+                    <span class="font-semibold text-blue-600">{{ formatNumber(sandboxVariables[varName]) }}</span>
+                  </div>
+                  <input type="number" v-model.number="sandboxVariables[varName]" @input="runSandboxTest" 
+                         class="w-full text-xs px-2 py-1 border border-slate-300 rounded font-mono focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div v-if="!sandboxResult || sandboxResult.used_vars.length === 0" class="text-xs text-slate-400 italic">
+                  Введите в формулу переменные (например, @deals_won_sum, @base_rate), чтобы протестировать расчет.
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB: REPORTING PERIODS ================= -->
+      <section v-if="currentTab === 'periods'" class="space-y-6">
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">Управление расчетными периодами</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Создание периодов, запуск расчета, фиксация и скачивание ведомостей</p>
+          </div>
+          
+          <button v-if="currentUser.role === 'ADMIN'" @click="showNewPeriodModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center shadow transition">
+            <i data-lucide="plus" class="w-4 h-4 mr-1.5"></i>Новый период
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div v-for="p in periods" :key="p.id" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-base text-slate-900">{{ p.name }}</span>
+                <span :class="periodStatusBadge(p.status)" class="text-xs px-2.5 py-0.5 rounded-full font-bold">
+                  {{ p.status === 'LOCKED' ? '🔒 Зафиксирован' : p.status === 'CALCULATED' ? '✓ Рассчитан' : 'Черновик' }}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 mt-1 font-mono">Даты: {{ p.start_date }} — {{ p.end_date }}</p>
+              
+              <div class="mt-4 py-2 border-t border-b border-slate-100 text-xs text-slate-600 flex justify-between">
+                <span>Рассчитано сотрудников:</span>
+                <strong class="text-slate-900">{{ p.results_count }}</strong>
+              </div>
+            </div>
+
+            <div class="mt-5 space-y-2">
+              <div class="flex space-x-2">
+                <button v-if="currentUser.role === 'ADMIN' && p.status !== 'LOCKED'" 
+                        @click="triggerCalculation(p.id)" 
+                        class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center transition">
+                  <i data-lucide="play" class="w-3.5 h-3.5 mr-1"></i>Рассчитать
+                </button>
+
+                <button v-if="currentUser.role === 'ADMIN' && p.status === 'CALCULATED'" 
+                        @click="lockPeriod(p.id)" 
+                        class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center transition"
+                        title="Зафиксировать и закрыть период от правок">
+                  <i data-lucide="lock" class="w-3.5 h-3.5 mr-1"></i>Зафиксировать
+                </button>
+              </div>
+
+              <div v-if="currentUser.role !== 'EMPLOYEE'" class="flex space-x-2">
+                <button @click="exportExcel(p.id)" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center transition">
+                  <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 mr-1"></i>Excel (.xlsx)
+                </button>
+                <button @click="exportCsv(p.id)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center transition">
+                  CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB: TARGETS & PLANS ================= -->
+      <section v-if="currentTab === 'targets'" class="space-y-6">
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">Индивидуальные планы сотрудников на период</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Настройка базовых ставок (окладов) и плановых показателей на период: {{ currentPeriod ? currentPeriod.name : '' }}</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+              <thead class="bg-slate-50 text-slate-600 font-semibold text-xs uppercase">
+                <tr>
+                  <th class="px-4 py-3 text-left">Сотрудник</th>
+                  <th class="px-4 py-3 text-left">Должность / Отдел</th>
+                  <th class="px-4 py-3 text-right">Оклад (База, ₽)</th>
+                  <th class="px-4 py-3 text-right">План выручки, ₽</th>
+                  <th class="px-4 py-3 text-center">План задач, шт</th>
+                  <th class="px-4 py-3 text-center">Норма звонков</th>
+                  <th class="px-4 py-3 text-center">Оценка качества</th>
+                  <th class="px-4 py-3 text-center">Действие</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                <tr v-for="t in employeeTargets" :key="t.user_id" class="hover:bg-slate-50">
+                  <td class="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{{ t.full_name }}</td>
+                  <td class="px-4 py-3 text-slate-600 whitespace-nowrap">
+                    <div>{{ t.position_name }}</div>
+                    <div class="text-xs text-slate-400">{{ t.department_name }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-right whitespace-nowrap">
+                    <input type="number" v-model.number="t.base_rate" class="w-28 text-right font-mono text-xs px-2 py-1 border rounded">
+                  </td>
+                  <td class="px-4 py-3 text-right whitespace-nowrap">
+                    <input type="number" v-model.number="t.plan_sales" class="w-32 text-right font-mono text-xs px-2 py-1 border rounded">
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <input type="number" v-model.number="t.plan_tasks" class="w-16 text-center font-mono text-xs px-2 py-1 border rounded">
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <input type="number" v-model.number="t.target_calls" class="w-16 text-center font-mono text-xs px-2 py-1 border rounded">
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <input type="number" v-model.number="t.quality_score" class="w-16 text-center font-mono text-xs px-2 py-1 border rounded">
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <button @click="saveEmployeeTarget(t)" class="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs px-3 py-1 rounded font-medium transition">
+                      Сохранить
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB: MY KPI (EMPLOYEE PERSONAL VIEW) ================= -->
+      <section v-if="currentTab === 'my_kpi'" class="space-y-6">
+        
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-6">
+          
+          <div class="flex items-center space-x-4 border-b border-slate-200 pb-5">
+            <img :src="currentUser.avatar_url" class="w-16 h-16 rounded-full border-2 border-blue-500 shadow">
+            <div>
+              <h2 class="text-xl font-bold text-slate-900">{{ currentUser.full_name }}</h2>
+              <p class="text-sm text-slate-500">{{ currentUser.position_name }} | {{ currentUser.department_name }}</p>
+              <span class="inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                Период: {{ currentPeriod ? currentPeriod.name : '—' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Highlight Cards -->
+          <div v-if="myCalculation" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+              <span class="text-xs font-semibold text-slate-500 uppercase">Оклад (База)</span>
+              <div class="text-xl font-bold text-slate-800 mt-1">
+                {{ formatMoney(myCalculation.computed_variables.base_rate) }}
+              </div>
+            </div>
+
+            <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center">
+              <span class="text-xs font-semibold text-emerald-700 uppercase">Начисленная премия</span>
+              <div class="text-2xl font-black text-emerald-600 mt-1">
+                +{{ formatMoney(myCalculation.bonus_amount) }}
+              </div>
+              <span class="text-xs font-bold text-emerald-700">KPI: {{ myCalculation.kpi_percent }}%</span>
+            </div>
+
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-200 text-center">
+              <span class="text-xs font-semibold text-blue-700 uppercase">Итого к выплате</span>
+              <div class="text-2xl font-black text-blue-700 mt-1">
+                {{ formatMoney(myCalculation.total_payout) }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Formula & Fact breakdown -->
+          <div v-if="myCalculation" class="space-y-4">
+            <div class="bg-slate-900 text-emerald-400 p-4 rounded-xl font-mono text-xs border border-slate-800">
+              <span class="text-slate-400 block mb-1">Примененная формула расчета:</span>
+              {{ myCalculation.formula_expression }}
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold text-slate-600 uppercase mb-2">Фактические показатели из Битрикс24 за период:</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div class="bg-slate-50 p-3 rounded-lg border">
+                  <span class="text-slate-500 block">Выручка (CRM):</span>
+                  <strong class="text-slate-900 text-sm">{{ formatMoney(myCalculation.raw_metrics.deals_won_sum) }}</strong>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border">
+                  <span class="text-slate-500 block">Закрыто задач:</span>
+                  <strong class="text-slate-900 text-sm">{{ myCalculation.raw_metrics.tasks_closed || 0 }} шт</strong>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border">
+                  <span class="text-slate-500 block">Задач в срок:</span>
+                  <strong class="text-slate-900 text-sm">{{ myCalculation.raw_metrics.tasks_on_time_pct || 100 }}%</strong>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border">
+                  <span class="text-slate-500 block">Звонков:</span>
+                  <strong class="text-slate-900 text-sm">{{ myCalculation.raw_metrics.calls_count || 0 }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="text-center py-10 text-slate-500">
+            <i data-lucide="calendar-x" class="w-10 h-10 mx-auto text-slate-300 mb-2"></i>
+            Для вашего аккаунта расчет за выбранный период еще не произведен.
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ================= TAB: SETTINGS & BITRIX24 ================= -->
+      <section v-if="currentTab === 'settings'" class="space-y-6">
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+          <div class="border-b border-slate-200 pb-4">
+            <h2 class="text-lg font-bold text-slate-900">Интеграция с Битрикс24</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Параметры вебхука и авторизации REST API</p>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="text-xs font-bold text-slate-700 uppercase block mb-1">URL входящего вебхука Битрикс24:</label>
+              <input type="text" v-model="bitrixWebhookInput" placeholder="https://yourportal.bitrix24.ru/rest/1/abcdefghij/" 
+                     class="w-full text-sm font-mono p-2.5 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+              <p class="text-xs text-slate-400 mt-1">Требуемые права: crm, tasks, user, telephony</p>
+              <p v-if="bitrixWebhookMasked" class="text-xs text-slate-500 mt-1">Текущий сохраненный URL: <code class="font-mono text-slate-700 font-semibold">{{ bitrixWebhookMasked }}</code></p>
+            </div>
+
+            <div class="flex items-center space-x-3 pt-2">
+              <button @click="saveBitrixSettings" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                Сохранить настройки
+              </button>
+              <button @click="testBitrixConnection" class="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                Проверить соединение
+              </button>
+              <span v-if="bitrixConnMsg" :class="bitrixConnSuccess ? 'text-emerald-600' : 'text-red-600'" class="text-xs font-semibold">{{ bitrixConnMsg }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- RESULT DETAILS MODAL -->
+    <div v-if="selectedResultModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+        <div class="flex justify-between items-start border-b border-slate-200 pb-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Детализация расчета KPI</h3>
+            <p class="text-xs text-slate-500">{{ selectedResultModal.employee_name }} ({{ selectedResultModal.position_name }})</p>
+          </div>
+          <button @click="selectedResultModal = null" class="text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="bg-slate-900 text-emerald-400 p-3 rounded-lg font-mono text-xs">
+          <span class="text-slate-400 block text-[11px] mb-1">Формула:</span>
+          {{ selectedResultModal.formula_expression }}
+        </div>
+
+        <div>
+          <span class="text-xs font-bold text-slate-600 uppercase block mb-2">Подставленные переменные:</span>
+          <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+            <div v-for="(v, k) in selectedResultModal.computed_variables" :key="k" class="bg-slate-50 p-2 rounded border flex justify-between">
+              <span class="text-slate-500">@{{ k }}:</span>
+              <strong class="text-slate-900">{{ formatNumber(v) }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-200 pt-3 flex justify-between items-center text-sm font-bold">
+          <span>Итоговая премия:</span>
+          <span class="text-emerald-600 text-base">+{{ formatMoney(selectedResultModal.bonus_amount) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW PERIOD MODAL -->
+    <div v-if="showNewPeriodModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="flex justify-between items-start border-b pb-3">
+          <h3 class="font-bold text-slate-900 text-base">Создание нового периода расчета</h3>
+          <button @click="showNewPeriodModal = false"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+        </div>
+
+        <div class="space-y-3 text-sm">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Название периода:</label>
+            <input type="text" v-model="newPeriodForm.name" placeholder="Ноябрь 2026" class="w-full border rounded px-3 py-1.5 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Дата начала:</label>
+              <input type="date" v-model="newPeriodForm.start_date" class="w-full border rounded px-3 py-1.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Дата окончания:</label>
+              <input type="date" v-model="newPeriodForm.end_date" class="w-full border rounded px-3 py-1.5 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2">
+          <button @click="showNewPeriodModal = false" class="px-4 py-2 border rounded-lg text-xs font-semibold">Отмена</button>
+          <button @click="submitNewPeriod" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">Создать</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
